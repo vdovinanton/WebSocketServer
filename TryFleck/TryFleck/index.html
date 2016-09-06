@@ -1,0 +1,88 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+    <title>websocket client</title>
+    <script type="text/javascript">
+        var inc = document.getElementById('incomming');
+        var wsImpl = window.WebSocket || window.MozWebSocket;
+        var form = document.getElementById('sendForm');
+        var input = document.getElementById('sendText');
+        var isConnected = false;
+
+        var start = function () {
+            inc = document.getElementById('incomming');
+            wsImpl = window.WebSocket || window.MozWebSocket;
+            form = document.getElementById('sendForm');
+            input = document.getElementById('sendText');
+
+            var self = this;
+
+            inc.innerHTML += "connecting to server ..<br/>";
+
+            // create a new websocket and connect
+            window.ws = new wsImpl('ws://localhost:8181/');
+
+            // when the connection is established, this method is called
+            ws.onopen = function () {
+                isConnected = true;
+                inc.innerHTML += '.. connection open<br/>';
+            };
+
+            // when the connection is closed, this method is called
+            ws.onclose = function () {
+                isConnected = false;
+                inc.innerHTML += '.. connection closed<br/>';
+                setTimeout(function () {
+                    window.ws = null;
+                    start();
+                }, 5000);
+            }
+            // when data is comming from the server, this metod is called
+            ws.onmessage = function (evt) {
+                inc.innerHTML += evt.data + '<br/>';
+
+                var obj = JSON.parse(evt.data);
+
+                start[obj.type](JSON.parse(obj.data));
+            };
+
+            
+
+            ws.onerror = function (err) {
+                console.error('Socket encountered error: ', err.message, 'Closing socket');
+                isConnected = false;
+                ws.close();
+            };
+
+            form.addEventListener('submit', function(e){
+                e.preventDefault();
+                var val = input.value;
+                ws.send(JSON.stringify({
+                    type: 'Customer',
+                    data: JSON.stringify({
+                        id: 1,
+                        name: val,
+                        address: 'USA, NY, 148 street 1488',
+                        price: 487
+                    })
+                }));
+                input.value = "";
+            });
+        }
+
+        start.Customer = function (data) {
+            if (data) {
+
+            }
+        }
+
+        window.onload = start;
+    </script>
+</head>
+<body>
+    <form id="sendForm">
+        <input id="sendText" placeholder="Text to send" />
+    </form>
+    <pre id="incomming"></pre>
+</body>
+</html>
