@@ -11,16 +11,35 @@ namespace TryFleck
 {
     public class SomeClass
     {
-        public string Type { get; set; }
+        public string Method { get; set; }
         public string Data { get; set; }
     }
 
-    public class Customer
+    /// <summary>
+    /// Represent data provider between <see cref="FleckServer"/> and <see cref="Hub"/> heirs
+    /// </summary>
+    public class Hub
     {
-        public string Name { get; set; }
-        public string Address { get; set; }
-        public int Id { get; set; }
-        public decimal Price { get; set; }
+        /// <summary>
+        /// Constructor withoud parameters, he signs derived types
+        /// </summary>
+        public Hub()
+        {
+            var res = FindAllDerivedTypes<Hub>();
+            res.ForEach(q => FleckServer.Instance().Subscribe(q));
+        }
+
+        private static List<Type> FindAllDerivedTypes<T>()
+        {
+            return FindAllDerivedTypes<T>(Assembly.GetAssembly(typeof(T)));
+        }
+        private static List<Type> FindAllDerivedTypes<T>(Assembly assembly)
+        {
+            var derivedType = typeof(T);
+            return assembly
+                .GetTypes()
+                .Where(t => t != derivedType && derivedType.IsAssignableFrom(t)).ToList();
+        }
     }
 
     /// <summary>
@@ -34,10 +53,17 @@ namespace TryFleck
         public static FleckServer Instance() => _instance.Value;
         #endregion
 
+        protected MethodInfo Methood { get; set; }
+
         private readonly WebSocketServer _server;
         private readonly ICollection<IWebSocketConnection> _allSockets;
+        private readonly IList<Type> _subscribes = new List<Type>();
+        public void Subscribe(Type obj)
+        {
+            _subscribes.Add(obj);
+        }
 
-        private FleckServer()
+        protected FleckServer()
         {
             FleckLog.Level = LogLevel.Debug;
             _allSockets = new List<IWebSocketConnection>();
@@ -58,7 +84,7 @@ namespace TryFleck
                     Debug.WriteLine($"Disconnect: {socket.ConnectionInfo.Id}");
                     _allSockets.Remove(socket);
                 };
-                socket.OnMessage = Send;
+                socket.OnMessage = OnMessage;
             });
         }
 
@@ -66,70 +92,36 @@ namespace TryFleck
         /// Send to all subscribes
         /// </summary>
         /// <param name="json">Serializable object</param>
-        public void Send(string json)
+        public void OnMessage(string json)
         {
             if (!string.IsNullOrEmpty(json))
             {
-                try
-                {
-                    var data = (JObject)JsonConvert.DeserializeObject(json);
-                    var typeName = data["type"].Value<string>();
-                    var jsonData = data["data"].Value<string>();
+                var data = (JObject)JsonConvert.DeserializeObject(json);
+                var methodName = data["Method"].Value<string>();
+                var jsonData = data["Data"].Value<string>();
 
+                // get desired method
+                var currentType = _subscribes.FirstOrDefault(q => q.GetMethods().Any(x => x.Name == methodName));
+                var method = currentType?.GetMethod(methodName);
 
-                    var m = this.GetType().GetMethods().FirstOrDefault(x => x.Name == typeName);
-                    var p = m.GetParameters().FirstOrDefault();
-                    var type = p.ParameterType;
+                // get parameter method type
+                var methodParameter = method?.GetParameters().FirstOrDefault();
+                var methodParameterType = methodParameter?.ParameterType;
 
-                    //var type = GetTypeByName(typeName);
+                if (methodParameter == null) return;
 
-                    var desObj = JsonConvert.DeserializeObject(jsonData, type);
+                var desObj = JsonConvert.DeserializeObject(jsonData, methodParameterType);
 
-                    m.Invoke(this, new[] {desObj});
-
-                    _allSockets.ToList().ForEach(s => s.Send(json));
-                }
-                catch (Exception e)
-                {
-                    // ignored
-                }
+                // call the method with parameter
+                var instance = Activator.CreateInstance(currentType);
+                method.Invoke(instance, new[] { desObj });
             }
-        }
-
-        public void Customer(Customer cust)
-        {
-            
-        }
-
-        /// <summary>
-        /// Send by subscribe id
-        /// </summary>
-        /// <param name="id">Subscribe <see cref="Guid"/> id</param>
-        /// <param name="json">Serializable object</param>
-        public void Send(Guid id, string json)
-        {
-            Debug.WriteLine($"{json} to {id}");
-            var socket = _allSockets.ToList().FirstOrDefault(q => q.ConnectionInfo.Id == id);
-            socket?.Send(json);
         }
 
         public void Dispose()
         {
             _server.Dispose();
             _allSockets.Clear();
-        }
-
-        private static Type[] GetTypeByName(string className)
-        {
-            var returnVal = new List<Type>();
-
-            foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                var assemblyTypes = a.GetTypes();
-                returnVal.AddRange(assemblyTypes.Where(t => t.Name == className));
-            }
-
-            return returnVal.ToArray();
         }
     }
 }

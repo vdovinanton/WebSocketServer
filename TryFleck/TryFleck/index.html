@@ -58,8 +58,8 @@
                 e.preventDefault();
                 var val = input.value;
                 ws.send(JSON.stringify({
-                    type: 'Customer',
-                    data: JSON.stringify({
+                    Method: 'Order',
+                    Data: JSON.stringify({
                         id: 1,
                         name: val,
                         address: 'USA, NY, 148 street 1488',

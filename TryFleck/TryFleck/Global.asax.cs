@@ -6,6 +6,7 @@ using System.Web;
 using System.Web.Http;
 using System.Web.Routing;
 using Fleck;
+using TryFleck.Hubs;
 
 namespace TryFleck
 {
@@ -13,6 +14,7 @@ namespace TryFleck
     {
         protected void Application_Start()
         {
+            var orderHub = new OrderHub();
             FleckServer.Instance().Start();
         }
 
